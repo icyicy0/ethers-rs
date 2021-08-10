@@ -16,7 +16,7 @@ use ethers_core::{
         elliptic_curve::FieldBytes,
         Secp256k1,
     },
-    types::{Address, Signature, TransactionRequest, H256},
+    types::{transaction::eip2718::TypedTransaction, Address, Signature, H256},
     utils::hash_message,
 };
 use hash::Sha256Proxy;
@@ -43,7 +43,7 @@ use std::fmt;
 ///
 /// // Optionally, the wallet's chain id can be set, in order to use EIP-155
 /// // replay protection with different chains
-/// let wallet = wallet.set_chain_id(1337u64);
+/// let wallet = wallet.with_chain_id(1337u64);
 ///
 /// // The wallet can be used to sign messages
 /// let message = b"hello";
@@ -60,8 +60,8 @@ pub struct Wallet<D: DigestSigner<Sha256Proxy, RecoverableSignature>> {
     pub(crate) signer: D,
     /// The wallet's address
     pub(crate) address: Address,
-    /// The wallet's chain id (for EIP-155), signs w/o replay protection if left unset
-    pub(crate) chain_id: Option<u64>,
+    /// The wallet's chain id (for EIP-155)
+    pub(crate) chain_id: u64,
 }
 
 #[async_trait]
@@ -75,53 +75,56 @@ impl<D: Sync + Send + DigestSigner<Sha256Proxy, RecoverableSignature>> Signer fo
         let message = message.as_ref();
         let message_hash = hash_message(message);
 
-        Ok(self.sign_hash_with_eip155(message_hash, None))
+        Ok(self.sign_hash(message_hash, false))
     }
 
-    async fn sign_transaction(&self, tx: &TransactionRequest) -> Result<Signature, Self::Error> {
+    async fn sign_transaction(&self, tx: &TypedTransaction) -> Result<Signature, Self::Error> {
         let sighash = tx.sighash(self.chain_id);
-        Ok(self.sign_hash_with_eip155(sighash, self.chain_id))
+        Ok(self.sign_hash(sighash, true))
     }
 
     fn address(&self) -> Address {
         self.address
     }
-}
 
-impl<D: DigestSigner<Sha256Proxy, RecoverableSignature>> Wallet<D> {
-    fn sign_hash_with_eip155(&self, hash: H256, chain_id: Option<u64>) -> Signature {
-        let recoverable_sig: RecoverableSignature =
-            self.signer.sign_digest(Sha256Proxy::from(hash));
-
-        let v = to_eip155_v(recoverable_sig.recovery_id(), chain_id);
-
-        let r_bytes: FieldBytes<Secp256k1> = recoverable_sig.r().into();
-        let s_bytes: FieldBytes<Secp256k1> = recoverable_sig.s().into();
-        let r = H256::from_slice(&r_bytes.as_slice());
-        let s = H256::from_slice(&s_bytes.as_slice());
-
-        Signature { r, s, v }
+    /// Gets the wallet's chain id
+    ///
+    /// # Panics
+    ///
+    /// If the chain id has not already been set.
+    fn chain_id(&self) -> u64 {
+        self.chain_id
     }
 
     /// Sets the wallet's chain_id, used in conjunction with EIP-155 signing
-    pub fn set_chain_id<T: Into<u64>>(mut self, chain_id: T) -> Self {
-        self.chain_id = Some(chain_id.into());
+    fn with_chain_id<T: Into<u64>>(mut self, chain_id: T) -> Self {
+        self.chain_id = chain_id.into();
         self
+    }
+}
+
+impl<D: DigestSigner<Sha256Proxy, RecoverableSignature>> Wallet<D> {
+    fn sign_hash(&self, hash: H256, eip155: bool) -> Signature {
+        let recoverable_sig: RecoverableSignature =
+            self.signer.sign_digest(Sha256Proxy::from(hash));
+
+        let v = if eip155 {
+            to_eip155_v(recoverable_sig.recovery_id(), self.chain_id)
+        } else {
+            u8::from(recoverable_sig.recovery_id()) as u64 + 27
+        };
+
+        let r_bytes: FieldBytes<Secp256k1> = recoverable_sig.r().into();
+        let s_bytes: FieldBytes<Secp256k1> = recoverable_sig.s().into();
+        let r = H256::from_slice(r_bytes.as_slice());
+        let s = H256::from_slice(s_bytes.as_slice());
+
+        Signature { r, s, v }
     }
 
     /// Gets the wallet's signer
     pub fn signer(&self) -> &D {
         &self.signer
-    }
-
-    /// Gets the wallet's chain id
-    pub fn chain_id(&self) -> Option<u64> {
-        self.chain_id
-    }
-
-    /// Returns the wallet's address
-    pub fn address(&self) -> Address {
-        self.address
     }
 }
 

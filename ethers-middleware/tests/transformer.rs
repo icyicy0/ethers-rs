@@ -8,7 +8,7 @@ use ethers_middleware::{
     SignerMiddleware,
 };
 use ethers_providers::{Http, Middleware, Provider};
-use ethers_signers::LocalWallet;
+use ethers_signers::{LocalWallet, Signer};
 use rand::Rng;
 use std::{convert::TryFrom, sync::Arc, time::Duration};
 
@@ -26,6 +26,8 @@ async fn ds_proxy_transformer() {
     let provider = Provider::<Http>::try_from(ganache.endpoint())
         .unwrap()
         .interval(Duration::from_millis(10u64));
+    let chain_id = provider.get_chainid().await.unwrap().as_u64();
+    let wallet = wallet.with_chain_id(chain_id);
     let signer_middleware = SignerMiddleware::new(provider.clone(), wallet);
     let wallet_addr = signer_middleware.address();
     let provider = Arc::new(signer_middleware.clone());
@@ -42,7 +44,8 @@ async fn ds_proxy_transformer() {
         contract.bytecode.clone(),
         Arc::clone(&provider),
     );
-    let ds_proxy_factory = factory.deploy(()).unwrap().send().await.unwrap();
+    let ds_proxy_factory = factory.deploy(()).unwrap().legacy();
+    let ds_proxy_factory = ds_proxy_factory.send().await.unwrap();
 
     // deploy a new DsProxy contract.
     let ds_proxy = DsProxy::build::<HttpWallet, Arc<HttpWallet>>(
@@ -66,7 +69,8 @@ async fn ds_proxy_transformer() {
         contract.bytecode.clone(),
         Arc::clone(&provider),
     );
-    let simple_storage = factory.deploy(()).unwrap().send().await.unwrap();
+    let deployer = factory.deploy(()).unwrap().legacy();
+    let simple_storage = deployer.send().await.unwrap();
 
     // instantiate a new transformer middleware.
     let provider = TransformerMiddleware::new(signer_middleware, ds_proxy.clone());
@@ -111,6 +115,8 @@ async fn ds_proxy_code() {
     let provider = Provider::<Http>::try_from(ganache.endpoint())
         .unwrap()
         .interval(Duration::from_millis(10u64));
+    let chain_id = provider.get_chainid().await.unwrap().as_u64();
+    let wallet = wallet.with_chain_id(chain_id);
     let signer_middleware = SignerMiddleware::new(provider.clone(), wallet);
     let wallet_addr = signer_middleware.address();
     let provider = Arc::new(signer_middleware.clone());
@@ -127,7 +133,8 @@ async fn ds_proxy_code() {
         contract.bytecode.clone(),
         Arc::clone(&provider),
     );
-    let ds_proxy_factory = factory.deploy(()).unwrap().send().await.unwrap();
+    let ds_proxy_factory = factory.deploy(()).unwrap().legacy();
+    let ds_proxy_factory = ds_proxy_factory.send().await.unwrap();
 
     // deploy a new DsProxy contract.
     let ds_proxy = DsProxy::build::<HttpWallet, Arc<HttpWallet>>(
@@ -160,6 +167,7 @@ async fn ds_proxy_code() {
             calldata,
         )
         .expect("could not construct DSProxy contract call")
+        .legacy()
         .send()
         .await
         .unwrap();

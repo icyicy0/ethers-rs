@@ -8,7 +8,8 @@ use futures_util::lock::Mutex;
 
 use ethers_core::{
     types::{
-        Address, NameOrAddress, Signature, Transaction, TransactionRequest, TxHash, H256, U256,
+        transaction::eip2718::TypedTransaction, Address, NameOrAddress, Signature, Transaction,
+        TransactionRequest, TxHash, H256, U256,
     },
     utils::keccak256,
 };
@@ -24,10 +25,8 @@ use super::types::*;
 pub struct LedgerEthereum {
     transport: Mutex<Ledger>,
     derivation: DerivationType,
-    pub chain_id: Option<u64>,
-
-    /// The ledger's address, instantiated at runtime
-    pub address: Address,
+    pub(crate) chain_id: u64,
+    pub(crate) address: Address,
 }
 
 impl LedgerEthereum {
@@ -38,14 +37,11 @@ impl LedgerEthereum {
     /// # async fn foo() -> Result<(), Box<dyn std::error::Error>> {
     /// use ethers::signers::{Ledger, HDPath};
     ///
-    /// let ledger = Ledger::new(HDPath::LedgerLive(0), Some(1)).await?;
+    /// let ledger = Ledger::new(HDPath::LedgerLive(0), 1).await?;
     /// # Ok(())
     /// # }
     /// ```
-    pub async fn new(
-        derivation: DerivationType,
-        chain_id: Option<u64>,
-    ) -> Result<Self, LedgerError> {
+    pub async fn new(derivation: DerivationType, chain_id: u64) -> Result<Self, LedgerError> {
         let transport = Ledger::init().await?;
         let address = Self::get_address_with_path_transport(&transport, &derivation).await?;
 
@@ -123,13 +119,9 @@ impl LedgerEthereum {
     }
 
     /// Signs an Ethereum transaction (requires confirmation on the ledger)
-    pub async fn sign_tx(
-        &self,
-        tx: &TransactionRequest,
-        chain_id: Option<u64>,
-    ) -> Result<Signature, LedgerError> {
+    pub async fn sign_tx(&self, tx: &TypedTransaction) -> Result<Signature, LedgerError> {
         let mut payload = Self::path_to_bytes(&self.derivation);
-        payload.extend_from_slice(tx.rlp(chain_id).as_ref());
+        payload.extend_from_slice(tx.rlp(self.chain_id).as_ref());
         self.sign_payload(INS::SIGN, payload).await
     }
 
@@ -216,7 +208,7 @@ mod tests {
     // Replace this with your ETH addresses.
     async fn test_get_address() {
         // Instantiate it with the default ledger derivation path
-        let ledger = LedgerEthereum::new(DerivationType::LedgerLive(0), None)
+        let ledger = LedgerEthereum::new(DerivationType::LedgerLive(0), 1)
             .await
             .unwrap();
         assert_eq!(
@@ -235,7 +227,7 @@ mod tests {
     #[tokio::test]
     #[ignore]
     async fn test_sign_tx() {
-        let ledger = LedgerEthereum::new(DerivationType::LedgerLive(0), None)
+        let ledger = LedgerEthereum::new(DerivationType::LedgerLive(0), 1)
             .await
             .unwrap();
 
@@ -250,14 +242,15 @@ mod tests {
             .gas_price(400e9 as u64)
             .nonce(5)
             .data(data)
-            .value(ethers_core::utils::parse_ether(100).unwrap());
+            .value(ethers_core::utils::parse_ether(100).unwrap())
+            .into();
         let tx = ledger.sign_transaction(&tx_req).await.unwrap();
     }
 
     #[tokio::test]
     #[ignore]
     async fn test_version() {
-        let ledger = LedgerEthereum::new(DerivationType::LedgerLive(0), None)
+        let ledger = LedgerEthereum::new(DerivationType::LedgerLive(0), 1)
             .await
             .unwrap();
 
@@ -268,7 +261,7 @@ mod tests {
     #[tokio::test]
     #[ignore]
     async fn test_sign_message() {
-        let ledger = LedgerEthereum::new(DerivationType::Legacy(0), None)
+        let ledger = LedgerEthereum::new(DerivationType::Legacy(0), 1)
             .await
             .unwrap();
         let message = "hello world";

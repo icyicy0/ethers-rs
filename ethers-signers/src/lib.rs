@@ -10,6 +10,7 @@
 //! - [Private key](crate::LocalWallet)
 //! - [Ledger](crate::Ledger)
 //! - [YubiHSM2](crate::YubiWallet)
+//! - [AWS KMS](crate::AwsSigner)
 //!
 //! ```no_run
 //! # use ethers::{
@@ -24,7 +25,7 @@
 //! // create a transaction
 //! let tx = TransactionRequest::new()
 //!     .to("vitalik.eth") // this will use ENS
-//!     .value(10000);
+//!     .value(10000).into();
 //!
 //! // sign it
 //! let signature = wallet.sign_transaction(&tx).await?;
@@ -62,20 +63,19 @@ pub use ledger::{
 #[cfg(feature = "yubi")]
 pub use yubihsm;
 
+#[cfg(feature = "aws")]
+mod aws;
+
+#[cfg(feature = "aws")]
+pub use aws::{AwsSigner, AwsSignerError};
+
 use async_trait::async_trait;
-use ethers_core::types::{Address, Signature, TransactionRequest};
+use ethers_core::types::{transaction::eip2718::TypedTransaction, Address, Signature};
 use std::error::Error;
 
 /// Applies [EIP155](https://github.com/ethereum/EIPs/blob/master/EIPS/eip-155.md)
-pub fn to_eip155_v<T: Into<u8>>(recovery_id: T, chain_id: Option<u64>) -> u64 {
-    let standard_v: u8 = recovery_id.into();
-    if let Some(chain_id) = chain_id {
-        // When signing with a chain ID, add chain replay protection.
-        (standard_v as u64) + 35 + chain_id * 2
-    } else {
-        // Otherwise, convert to 'Electrum' notation.
-        (standard_v as u64) + 27
-    }
+pub fn to_eip155_v<T: Into<u8>>(recovery_id: T, chain_id: u64) -> u64 {
+    (recovery_id.into() as u64) + 35 + chain_id * 2
 }
 
 /// Trait for signing transactions and messages
@@ -91,11 +91,14 @@ pub trait Signer: std::fmt::Debug + Send + Sync {
     ) -> Result<Signature, Self::Error>;
 
     /// Signs the transaction
-    async fn sign_transaction(
-        &self,
-        message: &TransactionRequest,
-    ) -> Result<Signature, Self::Error>;
+    async fn sign_transaction(&self, message: &TypedTransaction) -> Result<Signature, Self::Error>;
 
     /// Returns the signer's Ethereum Address
     fn address(&self) -> Address;
+
+    /// Returns the signer's chain id
+    fn chain_id(&self) -> u64;
+
+    /// Sets the signer's chain id
+    fn with_chain_id<T: Into<u64>>(self, chain_id: T) -> Self;
 }

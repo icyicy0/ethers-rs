@@ -15,7 +15,7 @@ async fn using_gas_oracle() {
     let provider = Provider::<Http>::try_from(ganache.endpoint()).unwrap();
 
     // assign a gas oracle to use
-    let gas_oracle = Etherchain::new().category(GasCategory::Fastest);
+    let gas_oracle = GasNow::new().category(GasCategory::Fastest);
     let expected_gas_price = gas_oracle.fetch().await.unwrap();
 
     let provider = GasOracleMiddleware::new(provider, gas_oracle);
@@ -32,6 +32,8 @@ async fn using_gas_oracle() {
 }
 
 #[tokio::test]
+#[ignore]
+// TODO: Re-enable, EthGasStation changed its response api @ https://ethgasstation.info/api/ethgasAPI.json
 async fn eth_gas_station() {
     // initialize and fetch gas estimates from EthGasStation
     let eth_gas_station_oracle = EthGasStation::new(None);
@@ -58,6 +60,9 @@ async fn etherscan() {
 }
 
 #[tokio::test]
+#[ignore]
+// TODO: Etherchain has Cloudflare DDOS protection which makes the request fail
+// https://twitter.com/gakonst/status/1421796226316578816
 async fn etherchain() {
     // initialize and fetch gas estimates from Etherchain
     let etherchain_oracle = Etherchain::new().category(GasCategory::Fast);
