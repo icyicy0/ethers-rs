@@ -78,3 +78,6 @@ pub mod transformer;
 /// instead of using eth_sendTransaction and eth_sign
 pub mod signer;
 pub use signer::SignerMiddleware;
+
+pub mod flashbots;
+pub use flashbots::FlashbotsMiddleware;
