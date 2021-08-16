@@ -79,4 +79,7 @@ pub mod transformer;
 pub mod signer;
 pub use signer::SignerMiddleware;
 
+/// The [Flashbots Relay](crate::FlashbotsMiddleware) is used to bundle transactions and send them to
+/// the private Flashbots relay
 pub mod flashbots;
+pub use flashbots::FlashbotsMiddleware;
