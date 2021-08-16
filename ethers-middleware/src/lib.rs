@@ -80,4 +80,3 @@ pub mod signer;
 pub use signer::SignerMiddleware;
 
 pub mod flashbots;
-pub use flashbots::FlashbotsMiddleware;
