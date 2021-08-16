@@ -1,4 +1,4 @@
-use crate::utils::{deserialize_u256, deserialize_u64};
+use crate::flashbots::utils::{deserialize_u256, deserialize_u64};
 use ethers_core::{
     types::{transaction::response::Transaction, Address, Bytes, H256, U256, U64},
     utils::keccak256,
